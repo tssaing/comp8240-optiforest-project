@@ -1,41 +1,5 @@
-"""
-Convert anomaly detection datasets into the CSV format demo.py expects:
-no header row, all columns numeric, label in the final column.
-
-Handles four formats:
-
-    .npz    ADBench           arrays named X and y
-    .mat    PyOD / ODDS       arrays named X and y
-    .data   UCI               comma separated, class letter in the last column
-    .txt    GAAL              id, "out"/"nor", then features; detected automatically
-                              and given a _gaal suffix so it cannot overwrite
-                              another version of the same benchmark
-
-Examples:
-
-    python convert.py ../raw/6_cardio.npz --outdir data/benchmarks
-    python convert.py ../raw/ionosphere.data --anomaly b --outdir data/benchmarks
-    python convert.py ../raw/35_SpamBase.npz --outdir data/benchmarks --divide 50
-    python convert.py ../raw/SpamBase.txt --outdir data/benchmarks
-
-For .data files, --anomaly names the class value that counts as an anomaly.
-Everything else becomes normal. Without it the script lists the class values
-it found and stops, so you can choose. It has no effect on the other formats.
-
-Leading numbers and file extensions are stripped from output names, so
-6_cardio.npz becomes cardio.csv.
-
-Output goes to ./data unless --outdir says otherwise. Converted data is split
-by provenance, so --outdir should normally be given:
-
-    data/benchmarks     the paper's datasets
-    data/new            the five existing datasets not in the paper
-    data/constructed    datasets built for this study
-
-Two rescaling flags are available, --standardise and --divide. They do
-different things and only one can be used at a time. The reasoning for each is
-with the standardise() and divide() functions below.
-"""
+"""Convert anomaly detection datasets (.npz, .mat, UCI .data, GAAL .txt) to CSV, label in the last column."""
+# Usage: python scripts/convert.py ../raw/6_cardio.npz --outdir data/benchmarks [--standardise | --divide K]
 
 import argparse
 import csv
@@ -70,18 +34,12 @@ def load_mat(path):
 
 
 def looks_like_gaal(rows):
-    """GAAL files are: id, "out"/"nor", then the features."""
+    # GAAL files are: id, "out"/"nor", then the features.
     return len(rows[0]) >= 3 and rows[0][1].strip().strip('"') in ("out", "nor")
 
 
 def load_gaal(path):
-    """Read a GAAL-format file.
-
-    github.com/leibinghe/GAAL-based-outlier-detection, Data/ folder.
-    Column 0 is a row id, column 1 is the label as "out" or "nor", and the
-    rest are features. These files are normalised to [0, 1], unlike the ADBench
-    and PyOD versions of the same benchmarks.
-    """
+    # GAAL format (github.com/leibinghe/GAAL-based-outlier-detection): id, label, then features.
     rows = [r for r in csv.reader(open(path)) if r]
     labels = [r[1].strip().strip('"') for r in rows]
     X = np.array([[float(v) for v in r[2:]] for r in rows])
@@ -113,24 +71,7 @@ def load_uci(path, anomaly_class):
 
 
 def standardise(X):
-    """Rescale each column to mean 0 and standard deviation 1 (a z-score).
-
-    Columns with zero variance are left as zeros rather than divided by zero.
-    Ionosphere has one such column, constant at 0 in the UCI original.
-
-    Not recommended, and kept only because the negative result is part of this
-    study. On SpamBase, standardising brought the run down from over seven
-    hours to 45 minutes but dropped AUC-ROC to 0.5558 against a chance level of
-    0.5. Rescaling each column separately gives every feature equal weight, and
-    on SpamBase the informative features are the large-valued ones, so the
-    signal is diluted across the rest.
-
-    GAAL's copy of SpamBase is min-max normalised per column and fails the same
-    way, at 0.5829. Two independent per-column rescalings, the same outcome.
-
-    The paper does not state that it standardises its data, so any use of this
-    is a documented deviation and must be reported as one.
-    """
+    # Rescale each column to mean 0 and standard deviation 1. Constant columns stay at 0.
     mean = X.mean(axis=0)
     std = X.std(axis=0)
     constant = std == 0
@@ -140,30 +81,8 @@ def standardise(X):
 
 
 def divide(X, k):
-    """Divide every feature by a single constant.
-
-    Unlike standardising, this preserves the geometry exactly: all relative
-    distances stay in proportion, so features that dominated before still
-    dominate. Only the overall scale changes.
-
-    Why this matters. OptIForest hashes points with E2LSH, whose bin width is
-    fixed at 4 in detectors/opt.py. The number of hash buckets a dataset falls
-    into grows with the size of its values, and the merge step in
-    HierTree.build_hire is roughly quartic in the number of nodes it has to
-    merge, so datasets with large values cost orders of magnitude more time.
-
-    Dividing the data by k is mathematically identical to leaving the data
-    alone and setting E2LSH's bin width to 4k, since the offset B ~ U(0, w)
-    scales with it. Bin width is a real LSH hyperparameter that has to be
-    matched to the scale of the data, and the published code hard-codes it at
-    4, a value the paper never states. So this is a way of testing bin width
-    without modifying detectors/opt.py.
-
-    Choose k from the row norm alone, before running anything. Target a mean
-    row norm near 6, which is where the datasets that reproduce sit. A k picked
-    after seeing accuracy results is a tuned parameter and cannot be reported
-    as a reproduction.
-    """
+    # Divide every value by k, which is the same as using bin width 4k on the raw data.
+    # Choose k from the row norm (aim for about 6) before seeing any results.
     return X / float(k)
 
 

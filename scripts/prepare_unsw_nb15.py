@@ -1,12 +1,6 @@
 #!/usr/bin/env python3
-"""Build an anomaly detection CSV from UNSW-NB15.
-
-    python scripts/prepare_unsw_nb15.py --rows-frac=0.10 --standardise
-
-Drops id and attack_cat, collapses proto to its top 6 values plus other,
-one-hot encodes the three text columns, then samples rows to the wanted size
-and anomaly rate. Label goes last, no header, all numeric.
-"""
+"""Prepare UNSW-NB15: drop id and attack_cat, one-hot the text columns (proto: top 6 plus other), sample rows."""
+# Usage: python scripts/prepare_unsw_nb15.py --rows-frac=0.10 --standardise
 
 import argparse
 import os

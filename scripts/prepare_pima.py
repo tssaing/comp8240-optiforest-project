@@ -1,21 +1,5 @@
-"""
-Prepare Pima for OptIForest.
-
-The dataset uses 0 to stand in for a value that was not recorded. This script
-reports which columns are affected and how many rows carry one, and optionally
-drops those rows so the effect can be measured rather than assumed.
-
-    python prepare_pima.py ../raw/29_Pima.npz
-    python prepare_pima.py ../raw/29_Pima.npz --drop-missing
-
-Reporting only by default. With --drop-missing it writes an .npz that
-convert.py reads directly, so scaling and CSV formatting stay in one place:
-
-    python scripts/convert.py ../raw/pima_no_missing.npz --outdir data/new --divide 32
-
-Use the same divisor for both versions, so the row subset is the only thing
-that differs between the two runs.
-"""
+"""Report Pima's missing values (recorded as 0) and optionally drop those rows."""
+# Usage: python scripts/prepare_pima.py ../raw/29_Pima.npz [--drop-missing]
 
 import argparse
 import os
@@ -25,9 +9,7 @@ import numpy as np
 COLUMNS = ["pregnancies", "glucose", "blood pressure", "skin thickness",
            "insulin", "BMI", "diabetes pedigree", "age"]
 
-# Columns where 0 cannot be a real measurement: glucose, blood pressure, skin
-# thickness, insulin, BMI. Pregnancies is left out because 0 pregnancies is
-# ordinary, and diabetes pedigree and age have no zeros at all.
+# Columns where 0 means missing: glucose, blood pressure, skin thickness, insulin, BMI.
 MISSING_COLUMNS = [1, 2, 3, 4, 5]
 
 
@@ -71,10 +53,7 @@ def main():
 
     missing = report(X, y)
 
-    # Default is to keep the zeros. Dropping the affected rows halves the
-    # dataset, and imputing would invent nearly half the insulin column, which
-    # in anomaly detection pulls those rows toward the centre of the
-    # distribution. --drop-missing measures how much the zeros matter.
+    # Keep the zeros by default. --drop-missing writes a copy without those rows to compare.
     if not args.drop_missing:
         print("\nNo file written. The dataset is used as distributed; convert it "
               "with:\n\n    python scripts/convert.py "

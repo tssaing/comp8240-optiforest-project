@@ -1,30 +1,6 @@
 #!/usr/bin/env python3
-"""
-Run OptIForest and the baseline detectors on the same CSV under the same
-protocol, so every number in the comparison comes from one place.
-
-    python baselines/run_baselines.py --dataset=Ionosphere
-    python baselines/run_baselines.py --dataset=pendigits --detector=all
-    python baselines/run_baselines.py --dataset=SpamBase_div50 --out=/app/results/Spam.csv
-
-Detectors:
-
-    L2OPT     OptIForest, the paper's method, loaded from the repository's own
-              unmodified detectors/ package
-    L2SH      LSHiForest, the instance the paper compares against
-    iForest   scikit-learn
-    ECOD      PyOD
-
---detector defaults to 'baselines', which is the three comparison methods.
-Use 'all' to include OptIForest as well. OptIForest is much slower than the
-others, minutes to hours where they take seconds, so it is opt-in.
-
-Two packages here are called 'detectors'. LSHiForest's copy sits next to this
-script and wins the ordinary import, because Python puts a script's own
-directory first on the path. OptIForest's is at the repository root and is
-loaded explicitly by path under a different module name, so neither shadows the
-other and neither is modified.
-"""
+"""Run OptIForest and the three baselines on one dataset and report AUC-ROC and AUC-PR."""
+# Usage: python baselines/run_baselines.py --dataset=Ionosphere --detector=all
 
 import argparse
 import csv
@@ -43,20 +19,15 @@ from detectors import LSHiForest          # LSHiForest's copy, alongside this fi
 import warnings
 warnings.filterwarnings("ignore")
 
-NUM_TREES = 100          # matches demo.py and the paper
-DEFAULT_REPEATS = 15     # matches demo.py line 43
+NUM_TREES = 100          # as in demo.py and the paper
+DEFAULT_REPEATS = 15     # as in demo.py
 
 BASELINES = ["L2SH", "iForest", "ECOD"]
 ALL = ["L2OPT"] + BASELINES
 
 
 def load_optiforest():
-    """Load the repository's own detectors package under another name.
-
-    A plain `from detectors import OptIForest` would find LSHiForest's copy
-    next to this script instead. Loading by path avoids renaming or moving
-    either package, so the authors' code stays untouched.
-    """
+    # Both packages are called "detectors", so OptIForest's is loaded by path under another name.
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     pkg_dir = os.path.join(root, "detectors")
     spec = importlib.util.spec_from_file_location(
@@ -70,22 +41,16 @@ def load_optiforest():
 
 
 def auto_threshold(X):
-    """The paper's rule: 403 for large datasets, 55 for small.
-
-    Large means over 10,000 rows or over 1,000 features (Section 5.3).
-    """
+    # The paper's rule: 403 above 10,000 rows or 1,000 features, otherwise 55.
     return 403 if (X.shape[0] > 10000 or X.shape[1] > 1000) else 55
 
 
 def build(name, seed, threshold, branch):
-    """A fresh detector per repeat, as demo.py does."""
     if name == "L2OPT":
         OptIForest = load_optiforest()
         return OptIForest("L2OPT", NUM_TREES, threshold, branch)
     if name == "L2SH":
-        # The paper compares against LSHiForest's L2SH instance, chosen there
-        # for best accuracy and robustness.
-        return LSHiForest("L2SH", NUM_TREES)
+        return LSHiForest("L2SH", NUM_TREES)   # the LSHiForest version the paper compares against
     if name == "iForest":
         return IsolationForest(n_estimators=NUM_TREES, random_state=seed)
     if name == "ECOD":
@@ -95,43 +60,15 @@ def build(name, seed, threshold, branch):
 
 
 def score(detector, X):
-    """Anomaly scores, oriented so that higher means more anomalous.
-
-    OptIForest, LSHiForest and scikit-learn all return low values for
-    anomalies: the first two because decision_function negates the averaged
-    depths, the third because its convention is negative for outliers. demo.py
-    handles this with -1.0*y_pred and this does the same, so the metric calls
-    match.
-
-    PyOD is the exception. decision_scores_ is already high for anomalies, so
-    it is not flipped.
-    """
+    # Higher means more anomalous. ECOD's scores already are, the others are flipped as in demo.py.
     if type(detector).__name__ == "ECOD":
         return detector.decision_scores_
     return -1.0 * detector.decision_function(X)
 
 
 def drop_constant_columns(X, name):
-    """Remove constant columns, for ECOD only.
-
-    ECOD chooses which distribution tail to use from the skewness of each
-    column. A constant column has no spread, so its skewness is 0/0 = NaN, and
-    that NaN propagates into every anomaly score.
-
-    Ionosphere is one case: column 1 of the UCI original is constant at 0. That
-    is also why PyOD ships it with 33 features and ADBench with 32. The
-    34-feature UCI version is used in this study because it matches the paper.
-
-    Columns are identified by counting distinct values rather than by testing
-    the standard deviation against zero. On mnist, 7 columns hold a single
-    repeated value whose computed standard deviation comes out at around 1e-21
-    rather than exactly 0, through floating-point cancellation. Those pass a
-    `std > 0` test while still being constant, and ECOD fails on them.
-
-    Dropping the columns is safe for the comparison. A constant feature adds the
-    same amount to every pairwise distance, so it cannot affect any of the
-    distance-based detectors. Only ECOD is given the reduced matrix.
-    """
+    # ECOD fails on constant columns (their skewness is 0/0). Distinct values are counted
+    # because a standard-deviation test misses columns with tiny floating-point noise.
     keep = np.array([len(np.unique(X[:, j])) > 1 for j in range(X.shape[1])])
     dropped = int((~keep).sum())
     if dropped:
@@ -146,7 +83,7 @@ def run(name, X, y, repeats, threshold, branch):
     if name == "ECOD":
         X = drop_constant_columns(X, name)
 
-    # ECOD is deterministic, so repeating it only repeats the same answer.
+    # ECOD is deterministic, so one run is enough.
     n = 1 if name == "ECOD" else repeats
 
     for i in range(n):
@@ -252,8 +189,7 @@ def main():
         print(f"\tTesting time:\t {r['test_s']:.2f}")
         print(f"\trepeats:\t {r['repeats']}\n")
 
-        # Written as each detector finishes rather than at the end, so a later
-        # failure cannot discard results that already succeeded.
+        # Saved after each detector, so a later failure does not lose earlier results.
         if args.out:
             new = not os.path.exists(args.out)
             os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)

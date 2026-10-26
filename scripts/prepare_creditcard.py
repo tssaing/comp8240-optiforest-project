@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-"""Build an anomaly detection CSV from the Credit Card fraud dataset.
-
-    python scripts/prepare_creditcard.py --rows-frac=0.10 --standardise
-"""
+"""Prepare Credit Card: keep all 492 frauds, sample the normal rows, optionally standardise."""
+# Usage: python scripts/prepare_creditcard.py --rows-frac=0.10 --standardise
 
 import argparse
 import os
