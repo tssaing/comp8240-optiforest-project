@@ -281,6 +281,17 @@ numbers are worked out before this, so it does not change the data.
 Wikipedia changes all the time, so a new collection gives different edits. The
 files used in the study are the ones included here.
 
+**An earlier collection, with bots.** `wiki_edits_with_bots.csv` and
+`wiki_edits_with_bots_std.csv` are an earlier collection of 20,000 edits, made on
+6 October 2026 with an earlier version of `wiki_collect.py` that kept edits marked
+as bot edits. Its results are in `results/constructed/wiki_edits_with_bots_std.csv`
+and are used in the report only for comparison. That earlier version did not keep
+edit IDs or summaries, so there is no `_info.csv` for it, and its raw sample is not
+published because it contains usernames. To build a comparable collection with
+the current script:
+
+    python3 scripts/wiki_collect.py --include-bots --name=wiki_edits_with_bots_new
+
 Run the methods as in step 1, mounting `data/constructed` and
 `results/constructed`.
 

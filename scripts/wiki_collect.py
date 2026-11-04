@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Collect recent Wikipedia edits and build an anomaly detection CSV (label: edit later reverted)."""
 # Usage: python3 scripts/wiki_collect.py --target=20000 --name=wiki_edits_nobots
+# Add --include-bots to keep edits marked as bot edits, as the earlier collection did.
 
 import argparse
 import csv
@@ -54,18 +55,19 @@ def call(query, pause):
     raise SystemExit("gave up after five rate-limit retries")
 
 
-def collect_chunk(start, end, wanted, pause):
+def collect_chunk(start, end, wanted, pause, include_bots):
     edits = []
     carry_on = None
     while len(edits) < wanted:
         query = {
             "action": "query", "format": "json", "formatversion": "2",
             "list": "recentchanges", "rcnamespace": "0", "rctype": "edit",
-            "rcshow": "!bot",
             "rclimit": "500", "rcdir": "older",
             "rcstart": start.strftime(STAMP), "rcend": end.strftime(STAMP),
             "rcprop": "title|ids|timestamp|user|comment|sizes|tags|flags",
         }
+        if not include_bots:
+            query["rcshow"] = "!bot"   # leave out edits marked as bot edits
         if carry_on:
             query["rccontinue"] = carry_on
         data = call(query, pause)
@@ -77,7 +79,7 @@ def collect_chunk(start, end, wanted, pause):
     return edits[:wanted]
 
 
-def collect(target, lag_days, window_days, chunks, pause):
+def collect(target, lag_days, window_days, chunks, pause, include_bots):
     now = dt.datetime.now(dt.timezone.utc)
     newest = now - dt.timedelta(days=lag_days)
     oldest = now - dt.timedelta(days=window_days)
@@ -88,7 +90,7 @@ def collect(target, lag_days, window_days, chunks, pause):
     edits = []
     for i in range(chunks):
         start = newest - i * step
-        edits.extend(collect_chunk(start, start - step, target // chunks, pause))
+        edits.extend(collect_chunk(start, start - step, target // chunks, pause, include_bots))
         print(f"  chunk {i + 1}/{chunks}: {len(edits):,} edits")
     return edits
 
@@ -156,9 +158,11 @@ def main():
     ap.add_argument("--pause", type=float, default=1.5)
     ap.add_argument("--outdir", default="data/constructed")
     ap.add_argument("--name", default="wiki_edits_nobots")
+    ap.add_argument("--include-bots", action="store_true", help="keep edits marked as bot edits")
     args = ap.parse_args()
 
-    edits = collect(args.target, args.lag_days, args.window_days, args.chunks, args.pause)
+    edits = collect(args.target, args.lag_days, args.window_days, args.chunks, args.pause,
+                    args.include_bots)
     data = build_rows(edits)
     X, y = data[:, :-1], data[:, -1]
     report(X, y)
