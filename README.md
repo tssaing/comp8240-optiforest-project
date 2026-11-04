@@ -317,7 +317,7 @@ what each edit changed, and asks the model to rate it from 1 (good-faith) to 5
 A rating of 4 or 5 counts as harmful, and the script compares that with the
 reverted tag.
 
-It takes about 45 minutes and needs an internet connection to fetch the edits.
+It takes about 35 minutes and needs an internet connection to fetch the edits.
 Each rating is saved as it goes, so if the run stops, the same command carries on
 where it left off.
 
