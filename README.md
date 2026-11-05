@@ -3,8 +3,8 @@
 This project reproduces results from **OptIForest: Optimal Isolation Forest for
 Anomaly Detection** (Xiang et al., IJCAI 2023), compares the method against
 three of the paper's baselines, and applies it to datasets it has not been tested
-on before, including two built for this study. A local language model is used as
-a judge on the Wikipedia dataset.
+on before, including two built for this study. A large language model (LLM), run
+locally, is used as a judge on the Wikipedia dataset.
 
 COMP8240 Applications of Data Science, Macquarie University.
 
@@ -15,11 +15,12 @@ COMP8240 Applications of Data Science, Macquarie University.
 | Folder or file | What it holds |
 | --- | --- |
 | `detectors/`, `demo.py`, `test/` | OptIForest and its tests, the authors' code, unmodified |
+| `README_original.md` | The authors' own README |
 | `baselines/run_baselines.py` | Runs OptIForest and the three baselines on one dataset |
 | `baselines/score_rows.py` | Saves OptIForest's anomaly score for every row, for the LLM judge |
 | `scripts/` | Data preparation, the Wikipedia collection and the LLM judge |
 | `data/ad.csv` | The authors' sample dataset |
-| `data/constructed/` | The two datasets built for this study |
+| `data/constructed/` | The two datasets built for this study, plus an earlier Wikipedia collection with bots |
 | `results/` | One CSV of results per dataset |
 | `Dockerfile` | The pinned Python environment |
 
@@ -160,7 +161,7 @@ little from the example. The results in
 which is the default. Add `--out` to save results to a CSV.
 
 The authors' own script also runs straight after setup, on their sample data.
-It does 15 runs and takes about 40 minutes:
+It does 15 runs and takes about 20 to 40 minutes:
 
     docker run --rm optiforest
 
@@ -184,13 +185,26 @@ below expect downloaded files in a `raw` folder next to the repository
 Convert each file to a CSV with the label in the last column. `convert.py`
 reports the **mean row norm**, which shows whether the data needs rescaling.
 
+    python3 scripts/convert.py ../raw/ionosphere.data --outdir data/benchmarks --name Ionosphere --anomaly b
+    python3 scripts/convert.py ../raw/40_vowels.npz --outdir data/benchmarks --name Vowel
     python3 scripts/convert.py ../raw/6_cardio.npz --outdir data/benchmarks
+    python3 scripts/convert.py ../raw/41_Waveform.npz --outdir data/benchmarks
+    python3 scripts/convert.py ../raw/32_shuttle.npz --outdir data/benchmarks
+    python3 scripts/convert.py ../raw/32_shuttle.npz --outdir data/benchmarks --divide 22
+    python3 scripts/convert.py ../raw/32_shuttle.npz --outdir data/benchmarks --standardise
     python3 scripts/convert.py ../raw/35_SpamBase.npz --outdir data/benchmarks --divide 50
     python3 scripts/convert.py ../raw/35_SpamBase.npz --outdir data/benchmarks --standardise
-    python3 scripts/convert.py ../raw/40_vowels.npz --outdir data/benchmarks --name Vowel
+    python3 scripts/convert.py ../raw/30_satellite.npz --outdir data/benchmarks --divide 80
+    python3 scripts/convert.py ../raw/30_satellite.npz --outdir data/benchmarks --standardise
+    python3 scripts/convert.py ../raw/arrhythmia.mat --outdir data/benchmarks --divide 100
+    python3 scripts/convert.py ../raw/arrhythmia.mat --outdir data/benchmarks --standardise
+    python3 scripts/convert.py ../raw/24_mnist.npz --outdir data/benchmarks --divide 130
+    python3 scripts/convert.py ../raw/24_mnist.npz --outdir data/benchmarks --standardise
 
-The output is named after the input file, for example `cardio.csv`. Vowel and
-Ionosphere were given the paper's names with `--name`.
+These are the commands behind every file in `results/benchmarks/`, and each one
+rebuilds its data file exactly. The output is named after the input file, for
+example `cardio.csv`. Vowel and Ionosphere were given the paper's names with
+`--name`, and Ionosphere needs `--anomaly b` to say which class is the anomaly.
 
 There are two ways to rescale:
 
@@ -231,16 +245,26 @@ AD is already in the Docker image, so it needs no data folder mounted:
 | UNSW-NB15 | [UNSW Canberra](https://research.unsw.edu.au/projects/unsw-nb15-dataset) | `prepare_unsw_nb15.py` |
 | Credit Card | [Kaggle](https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud) | `prepare_creditcard.py` |
 
+    python3 scripts/convert.py ../raw/28_pendigits.npz --outdir data/new
+    python3 scripts/convert.py ../raw/27_PageBlocks.npz --outdir data/new --standardise
+    python3 scripts/convert.py ../raw/27_PageBlocks.npz --outdir data/new --divide 254
     python3 scripts/convert.py ../raw/29_Pima.npz --outdir data/new --standardise
+    python3 scripts/convert.py ../raw/29_Pima.npz --outdir data/new --divide 32
     python3 scripts/prepare_pima.py ../raw/29_Pima.npz --drop-missing
     python3 scripts/convert.py ../raw/pima_no_missing.npz --outdir data/new --standardise
+    python3 scripts/convert.py ../raw/pima_no_missing.npz --outdir data/new --divide 32
     python3 scripts/prepare_unsw_nb15.py --rows-frac=0.10 --standardise
+    python3 scripts/prepare_unsw_nb15.py --rows-frac=0.25 --standardise
     python3 scripts/prepare_creditcard.py --rows-frac=0.10 --standardise
+    python3 scripts/prepare_creditcard.py --rows-frac=0.25 --standardise
 
 `prepare_pima.py` reports the missing values, which Pima records as 0, and
 `--drop-missing` writes a copy without those rows. UNSW-NB15 is 68% attacks, so
 its script samples the attacks down to 5%. Both the UNSW-NB15 and Credit Card
-scripts keep a fraction of the rows (`--rows-frac`).
+scripts keep a fraction of the rows (`--rows-frac`), with a fixed seed. These
+commands rebuild every file in `results/new/`. The UNSW-NB15 and Credit Card files
+come out with the same rows and labels, though the last few decimal places can
+differ with another numpy version.
 
 Run the methods as in step 1, mounting `data/new` and `results/new` instead.
 
@@ -251,10 +275,17 @@ Both are already in `data/constructed/`.
 **Synthetic Gaussian data.** Normal points in Gaussian clusters, with anomalies
 scattered at random:
 
-    python3 scripts/make_gaussian.py --clusters=5 --dims=5 --cluster-sd=3 \
-        --anomaly-rate=0.05 --scale=0.4
+    python3 scripts/make_gaussian.py --clusters=5 --dims=5 --cluster-sd=3 --anomaly-rate=0.05 --scale=0.4
+    python3 scripts/make_gaussian.py --clusters=5 --dims=5 --cluster-sd=3 --anomaly-rate=0.05 --scale=1
+    python3 scripts/make_gaussian.py --clusters=5 --dims=5 --cluster-sd=3 --anomaly-rate=0.05 --scale=3
+    python3 scripts/make_gaussian.py --clusters=5 --dims=2 --cluster-sd=3 --anomaly-rate=0.05 --scale=0.654
+    python3 scripts/make_gaussian.py --clusters=5 --dims=10 --cluster-sd=3 --anomaly-rate=0.05 --scale=0.295
+    python3 scripts/make_gaussian.py --clusters=5 --dims=20 --cluster-sd=3 --anomaly-rate=0.05 --scale=0.2
 
-The random seed is fixed, so this rebuilds the file in the repository exactly.
+The first three are the scale series: the same points multiplied by 0.4, 1 and
+3. The 0.4 file and the last three are the column series: 2, 5, 10 and 20
+features, with the scale set so the row norm stays at 6.2. The random seed is
+fixed, so these rebuild the files in the repository exactly.
 The file name gives the settings: `gauss_k5_d5_sd3_a5_s0.4` is 5 clusters, 5
 dimensions, cluster spread 3, 5% anomalies and scale 0.4.
 
@@ -271,7 +302,7 @@ This writes four files:
 | --- | --- |
 | `wiki_edits_nobots.csv` | Seven numbers per edit, such as its size and whether the editor was registered, plus the label |
 | `wiki_edits_nobots_std.csv` | The same, standardised. The methods run on this file. |
-| `wiki_edits_nobots_info.csv` | Each row's edit ID, article title, time and edit summary |
+| `wiki_edits_nobots_info.csv` | Each row's edit ID, article title, time, edit summary and reverted label |
 | `wiki_edits_nobots_sample.json` | 50 raw records as the API returns them |
 
 No usernames are kept. Edit summaries often name another editor, for example
@@ -346,6 +377,12 @@ Example output:
 Each results file has one row per method: the AUC-ROC and AUC-PR averaged over
 the runs with their standard deviations, the training and testing time per run
 in seconds, and OptIForest's threshold.
+
+AUC values in these files are between 0 and 1. The report shows them multiplied
+by 100, so 0.9602 here is 96.02 in the report.
+
+In the report, Tables 1 to 3 come from `results/benchmarks/`, Table 6 from
+`results/new/`, and Tables 5 and 7 to 9 from `results/constructed/`.
 
 ---
 
