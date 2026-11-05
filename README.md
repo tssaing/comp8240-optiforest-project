@@ -6,7 +6,8 @@ three of the paper's baselines, and applies it to datasets it has not been teste
 on before, including two built for this study. A large language model (LLM), run
 locally, is used as a judge on the Wikipedia dataset.
 
-COMP8240 Applications of Data Science, Macquarie University.
+COMP8240 Applications of Data Science, Macquarie University. This repository is
+coursework, shared for assessment and reproducibility.
 
 ---
 
